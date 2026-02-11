@@ -9,10 +9,10 @@ export const RestaurantSchema = z.object({
 export const RestaurantDetailsSchema = z.object({
   links: z.array(z.object({ name: z.string().min(1), url: z.string().min(1) })),
   contact: z.object({
-    name: z.string().min(1),
+    phone: z.string().min(1),
     email: z.string().min(1),
   }),
 });
 
-export type Restaurant = z.infer<typeof RestaurantSchema>
-export type RestaurantDetails = z.infer<typeof RestaurantDetailsSchema>
+export type Restaurant = z.infer<typeof RestaurantSchema>;
+export type RestaurantDetails = z.infer<typeof RestaurantDetailsSchema>;
