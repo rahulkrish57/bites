@@ -12,6 +12,7 @@ import {
   restaurantsByRatingkey,
   reviewDetailsKeyById,
   reviewkeyById,
+  WeatherKeyById,
 } from "../utils/keys.js";
 import { errorResponse, successResponse } from "../utils/responses.js";
 import { checkRestaurantExists } from "../middlewares/checkRestaurantId.js";
@@ -64,6 +65,42 @@ router.post("/", validate(RestaurantSchema), async (req, res, next) => {
     next(error);
   }
 });
+
+router.get(
+  "/:restaurantId/weather",
+  checkRestaurantExists,
+  async (req: Request<{ restaurantId: string }>, res, next) => {
+    const { restaurantId } = req.params;
+    try {
+      const client = await initializeRedisClient();
+      const weatherkey = WeatherKeyById(restaurantId);
+      const cachedWeather = await client.get(weatherkey);
+      if (cachedWeather) {
+        return successResponse(res, JSON.parse(cachedWeather));
+      }
+      const restaurantkey = restaurantKeyById(restaurantId);
+      const coords = await client.hGet(restaurantkey, "location");
+      if (!coords) {
+        return errorResponse(res, 404, "Coorinates have not been found");
+      }
+      const [lon, lat] = coords.split(",");
+      const apiResponse = await fetch(
+        `https://weather.visualcrossing.com/VisualCrossingWebServices/rest/services/timeline/${coords}?key=${process.env.WEATHER_API_KEY}`,
+      );
+      if (apiResponse.status === 200) {
+        const json = await apiResponse.json();
+        await client.set(weatherkey, JSON.stringify(json), {
+          EX: 60 * 60,
+        });
+        return successResponse(res, json);
+      }
+      console.log("error", apiResponse);
+      return errorResponse(res, 500, "Couldnt fetch weather info");
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 router.post(
   "/:restaurantId/reviews",
