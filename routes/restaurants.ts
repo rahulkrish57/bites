@@ -10,8 +10,10 @@ import {
 import { ReviewSchema, type Review } from "../schemas/review.js";
 import { initializeRedisClient } from "../utils/client.js";
 import {
+  bloomKey,
   cuisineKey,
   cuisinesKey,
+  indexKey,
   restaurantCuisinesKeyById,
   restaurantDetailsKeyById,
   restaurantKeyById,
@@ -51,6 +53,11 @@ router.post("/", validate(RestaurantSchema), async (req, res, next) => {
     const client = await initializeRedisClient();
     const id = nanoid();
     const restaurantkey = restaurantKeyById(id);
+    const bloomString = `${data.name}:${data.location}`;
+    const seenBefore = await client.bf.exists(bloomKey, bloomString);
+    if (seenBefore) {
+      return errorResponse(res, 409, "Restaurant Already Exists");
+    }
     const hashData = { id, name: data.name, location: data.location };
     await Promise.all([
       ...data.cuisines.map((cuisine) =>
@@ -65,6 +72,7 @@ router.post("/", validate(RestaurantSchema), async (req, res, next) => {
         score: 0,
         value: id,
       }),
+      client.bf.add(bloomKey, bloomString),
     ]);
     return successResponse(res, hashData, "Added New Restaurant");
   } catch (error) {
@@ -188,6 +196,17 @@ router.post(
     }
   },
 );
+
+router.get("/search", async (req, res, next) => {
+  const { q } = req.query;
+  try {
+    const client = await initializeRedisClient();
+    const results = await client.ft.search(indexKey, `@name:${q}`);
+    return successResponse(res, results);
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.get(
   "/:restaurantId",
